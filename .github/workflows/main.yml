@@ -1,0 +1,50 @@
+name: Kali RDP via Tailscale
+
+on:
+  workflow_dispatch:
+
+jobs:
+  kali-rdp:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 800
+
+    steps:
+      - name: Install Tailscale
+        run: curl -fsSL https://tailscale.com/install.sh | sh
+
+      - name: Connect to Tailscale
+        run: |
+          sudo tailscale up --authkey=${{ secrets.TS_AUTHKEY }} --hostname=gh-kali
+          sudo tailscale ip -4
+
+      - name: Start Kali container
+        run: |
+          docker run -d --name kali --network host --shm-size=2g \
+            kalilinux/kali-rolling sleep infinity
+
+      - name: Install Kali XFCE + xRDP
+        run: |
+          docker exec kali bash -c "
+            export DEBIAN_FRONTEND=noninteractive
+            apt update
+            apt install -y kali-desktop-xfce xrdp sudo dbus-x11
+            useradd -m -s /bin/bash kali
+            echo 'kali:kali123' | chpasswd
+            usermod -aG sudo kali
+            echo 'xfce4-session' > /home/kali/.xsession
+            chown kali:kali /home/kali/.xsession
+            adduser xrdp ssl-cert
+            mkdir -p /var/run/xrdp
+            xrdp-sesman
+            xrdp
+          "
+
+      - name: Show connection info
+        run: |
+          echo "Tailscale IP: $(sudo tailscale ip -4)"
+          echo "Username: kali"
+          echo "Password: kali123"
+          echo "Port: 3389"
+
+      - name: Keep alive
+        run: sleep 987654
